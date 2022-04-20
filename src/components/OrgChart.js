@@ -1,5 +1,5 @@
 import React, { useRef, useLayoutEffect } from 'react';
-import { KuiChartKa } from './KuiChart';
+import { KuiChartKa } from './KuiChartKa';
 
 export const OrgChartComponent = (props, ref) => {
     const d3Container = useRef(null);

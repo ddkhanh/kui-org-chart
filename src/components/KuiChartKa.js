@@ -1,7 +1,7 @@
 import { selection, select } from "d3-selection";
 import { max, min, sum, cumsum } from "d3-array";
 import { tree, stratify } from "d3-hierarchy";
-import { zoom, zoomIdentity } from "d3-zoom";
+import { zoom, zoomIdentity, zoomTransform } from "d3-zoom";
 import { linkHorizontal } from 'd3-shape';
 import { drag } from 'd3-drag';
 const d3 = {
@@ -15,6 +15,7 @@ const d3 = {
     stratify,
     zoom,
     zoomIdentity,
+    zoomTransform,
     linkHorizontal,
     drag
 }
@@ -109,6 +110,7 @@ export class KuiChartKa {
         attrs.depth = calc.nodeMaxHeight + 100;
 
         calc.centerX = calc.chartWidth / 2;
+        attrs.calc = calc;
 
         //********************  LAYOUTS  ***********************
         const layouts = {
@@ -127,12 +129,12 @@ export class KuiChartKa {
             };
 
             // Get zooming function
-            behaviors.zoom = d3.zoom().on("zoom", (event, d) => this.zoomed(event, d)).scaleExtent(attrs.scaleExtent)
+            behaviors.zoom = d3.zoom().scaleExtent(attrs.scaleExtent).on("zoom", (event, d) => this.zoomed(event, d))
             attrs.zoomBehavior = behaviors.zoom;
             behaviors.drag = d3.drag()
                 .on("start", this.dragstarted)
-                .on("drag", this.dragged)
-                .on("end", this.dragended)
+                .on("drag", (e, d) => this.dragged(e, d))
+                .on("end", (e, d) => this.dragended(e, d))
             attrs.dragBehavior = behaviors.drag;
         }
         //****************** ROOT node work ************************
@@ -455,6 +457,7 @@ export class KuiChartKa {
         // Enter any new nodes at the parent's previous position.
         var nodeEnter = nodesSelection.enter().append('g')
             .attr('class', 'node')
+            .attr('nodeId', (d) => d.id)
             .attr("transform", function (d) {
                 return "translate(" + source.x0 + "," + source.y0 + ")";
             })
@@ -746,6 +749,19 @@ export class KuiChartKa {
         var dy = d.y;
         console.log("Drag starting")
 
+        const attrs = this.getAttrs();
+        attrs.allNodes.forEach(nd => {
+            if (d === nd || nd.x === undefined || nd.y === undefined) {
+                return
+            }
+            var oNode = d3.select(`g[nodeId=${nd.id}]`);
+            if (this.checkOverLap(d, nd, 50)) {
+                oNode.attr('class', 'node node-dropable');
+            } else {
+                oNode.attr('class', 'node');
+            }
+        })
+
         node.attr("transform", "translate(" + dx + "," + dy + ")");
     }
 
@@ -757,18 +773,78 @@ export class KuiChartKa {
         // var dx = d.x0;
         // var dy = d.y0;
 
-        const node = d3.select(this.parentNode.parentNode);
+        const node = d3.select(`g[nodeId=${d.id}]`);
         node.attr('class', 'node')
         // node.attr("transform", "translate(" + dx + "," + dy + ")");
-        let removed = d3.select('g.node-dragging')
+        let removed = d3.select('g.node-dragging');
         removed = removed.remove();
+        let dropped = d3.select('g.node-dropable');
+        if (dropped) {
+            const attrs = this.getAttrs()
+            dropped.attr('class', 'node');
+            let draggingNode = d;
+            let selectedNode = dropped.data()[0]
+            // this.collapse(draggingNode.parent);
+            this.moveNode(draggingNode, selectedNode);
+            // this.centerNode(selectedNode);
+            // this.update(attrs.root);
+            // this.setLayouts(true);
+            // this.expand(draggingNode.parent);
+            // this.collapse(selectedNode);
+            // this.expandSomeNodes(selectedNode);
+            this.update(draggingNode.parent)
+            // this.centerNode(draggingNode);
+            // this.update(selectedNode)
+        }
+    }
+    // centerNode(source) {
+    //     const attrs = this.getAttrs();
+    //     const container = d3.select(attrs.container);
+    //     const containerRect = container.node().getBoundingClientRect();
+
+    //     let t = d3.zoomTransform(attrs.chart.node());
+    //     console.log(t);
+
+    //     let x = -source.y0;
+    //     let y = -source.x0;
+
+    //     y = -y * t.k + containerRect.height / 2;
+
+    //     attrs.chart.transition().duration(750).call(attrs.zoomBehavior.transform, d3.zoomIdentity.translate(x, y).scale(t.k));
+
+    // }
+    updateDepth(parent, depth) {
+        parent.depth = depth + 1;
+        let childrens = parent.children || parent._children;
+        if (childrens) {
+            childrens.forEach(d => {
+                if (d.children || d._children) {
+                    this.updateDepth(d, parent.depth)
+                } else {
+                    d.depth = parent.depth + 1;
+                }
+            })
+        }
     }
 
-    expand(d) {
-        if (d._children) {
-            d.children = d._children;
-            d.children.forEach((ch) => this.expand(ch));
-            d._children = null;
+    moveNode(draggingNode, selectedNode) {
+        // now remove the element from the parent, and insert it into the new elements children
+        var index = draggingNode.parent.children.indexOf(draggingNode);
+        if (index > -1) {
+            draggingNode.parent.children.splice(index, 1);
+            draggingNode.parent = selectedNode;
+            draggingNode.data.parentId = selectedNode.id;
+            this.updateDepth(draggingNode, selectedNode.depth)
+        }
+        if (selectedNode.children || selectedNode._children) {
+            if (selectedNode.children) {
+                selectedNode.children.push(draggingNode);
+            } else {
+                selectedNode._children.push(draggingNode);
+            }
+        } else {
+            selectedNode.children = [];
+            selectedNode.children.push(draggingNode);
         }
     }
 
@@ -793,20 +869,25 @@ export class KuiChartKa {
         attrs.lastTransform.k = zoomLevel;
         return this;
     }
+
+    // Function to center node when clicked/dropped so node doesn't get lost when collapsing/moving with large amount of children.
+
+
     click(event, d) {
         if (d.children) {
             d._children = d.children;
             d.children = null;
+            d.expanded = true;
         } else {
             d.children = d._children;
             d._children = null;
+            d.expanded = false;
         }
         this.update(d);
         console.log('Node clicked')
     }
     expandSomeNodes(d) {
         if (d.expanded) {
-
             let parent = d.parent;
             while (parent) {
 
@@ -820,7 +901,25 @@ export class KuiChartKa {
         if (d._children) {
             d._children.forEach(n => this.expandSomeNodes(n));
         }
+    }
 
+    checkOverLap(a, b, delta) {
+        let aCoordinates = [{ x: a.x, y: a.y }, //top-left
+        { x: a.x + a.width, y: a.y }, //top-right
+        { x: a.x, y: a.y + a.height },//bot-left
+        { x: a.x + a.width, y: a.y + a.height }];//bot-right
+
+        let bCoordinates = [{ x: b.x, y: b.y }, //top-left
+        { x: b.x + b.width, y: b.y }, //top-right
+        { x: b.x, y: b.y + b.height },//bot-left
+        { x: b.x + b.width, y: b.y + b.height }];//bot-right
+        // console.log('Data ', a, b, points)
+        var overlap = aCoordinates.every((p, i) => {
+            var result = Math.abs(p.x - bCoordinates[i].x) <= delta && Math.abs(p.y - bCoordinates[i].y) <= delta;
+            return result;
+        })
+
+        return overlap;
     }
 
     diagonal(s, t) {
@@ -856,11 +955,13 @@ export class KuiChartKa {
             d._children = d.children;
             d._children.forEach(c => this.collapse(c));
             d.children = null;
+            d.expanded = false;
         }
     }
     expand(d) {
         if (d._children) {
             d.children = d._children;
+            d.expanded = true;
             d.children.forEach((ch) => this.expand(ch));
             d._children = null;
         }
