@@ -46,7 +46,7 @@ export class KuiChartKa {
             nodeId: d => d.nodeId || d.id,
             parentNodeId: d => d.parentNodeId || d.parentId,
             nodeDefaultBackground: 'none',
-            scaleExtent: [0.001, 20],
+            scaleExtent: [0.1, 10],
         };
 
         Object.keys(attrs).forEach(key => {
@@ -104,7 +104,7 @@ export class KuiChartKa {
         calc.chartTopMargin = attrs.marginTop;
         calc.chartWidth = attrs.svgWidth - attrs.marginRight - calc.chartLeftMargin;
         calc.chartHeight = attrs.svgHeight - attrs.marginBottom - calc.chartTopMargin;
-        calc.nodeMaxWidth = 170;
+        calc.nodeMaxWidth = 300;
         calc.nodeMaxHeight = 250;
 
         attrs.depth = calc.nodeMaxHeight + 100;
@@ -180,15 +180,15 @@ export class KuiChartKa {
                 tag: 'svg',
                 selector: 'svg-chart-container'
             })
-            .attr('width', attrs.svgWidth)
-            .attr('height', attrs.svgHeight)
+            .attr('viewBox', [0, 0, attrs.svgWidth, attrs.svgHeight])
+            // .attr('height', attrs.svgHeight)
             .attr('font-family', attrs.defaultFont)
             .call(attrs.zoomBehavior)
             .attr('cursor', 'move')
             .style('background-color', attrs.backgroundColor)
         if (attrs.firstDraw) {
             svg.call(attrs.zoomBehavior)
-                .on("dblclick.zoom", null)
+                .on("zoom", null)
                 .attr("cursor", "move")
         }
         attrs.svg = svg;
@@ -288,78 +288,14 @@ export class KuiChartKa {
 
         //  Assigns the x and y position for the nodes
 
-
         // Get tree nodes and links
-        const nodes = treeData.descendants().map(d => {
-            if (d.width) return d;
-
-            let imageWidth = 100;
-            let imageHeight = 100;
-            let imageBorderColor = 'steelblue';
-            let imageBorderWidth = 0;
-            let imageRx = 0;
-            let imageCenterTopDistance = 0;
-            let imageCenterLeftDistance = 0;
-            let borderColor = 'steelblue';
-            let backgroundColor = 'steelblue';
-            let width = 170;
-            let height = 200;
-            let dropShadowId = `none`
-            if (d.data.nodeImage && d.data.nodeImage.shadow) {
-                dropShadowId = `url(#${attrs.dropShadowId})`
-            }
-            if (d.data.nodeImage && d.data.nodeImage.width) {
-                imageWidth = d.data.nodeImage.width
-            };
-            if (d.data.nodeImage && d.data.nodeImage.height) {
-                imageHeight = d.data.nodeImage.height
-            };
-            if (d.data.nodeImage && d.data.nodeImage.borderColor) {
-                imageBorderColor = this.rgbaObjToColor(d.data.nodeImage.borderColor)
-            };
-            if (d.data.nodeImage && d.data.nodeImage.borderWidth) {
-                imageBorderWidth = d.data.nodeImage.borderWidth
-            };
-            if (d.data.nodeImage && d.data.nodeImage.centerTopDistance) {
-                imageCenterTopDistance = d.data.nodeImage.centerTopDistance
-            };
-            if (d.data.nodeImage && d.data.nodeImage.centerLeftDistance) {
-                imageCenterLeftDistance = d.data.nodeImage.centerLeftDistance
-            };
-            if (d.data.borderColor) {
-                borderColor = this.rgbaObjToColor(d.data.borderColor);
-            }
-            if (d.data.backgroundColor) {
-                backgroundColor = this.rgbaObjToColor(d.data.backgroundColor);
-            }
-            if (d.data.nodeImage &&
-                d.data.nodeImage.cornerShape.toLowerCase() == "circle") {
-                imageRx = Math.max(imageWidth, imageHeight);
-            }
-            if (d.data.nodeImage &&
-                d.data.nodeImage.cornerShape.toLowerCase() == "rounded") {
-                imageRx = Math.min(imageWidth, imageHeight) / 6;
-            }
-            return Object.assign(d, {
-                imageWidth,
-                imageHeight,
-                imageBorderColor,
-                imageBorderWidth,
-                borderColor,
-                backgroundColor,
-                imageRx,
-                width,
-                height,
-                imageCenterTopDistance,
-                imageCenterLeftDistance,
-                dropShadowId
-            });
-        });
+        const nodes = this.getTreeDataAndLink(source, treeData);
 
         const links = treeData.descendants().slice(1);
 
         // Set constant depth for each nodes
         nodes.forEach(d => d.y = d.depth * attrs.depth);
+
         // ------------------- FILTERS ---------------------
 
         const patternsSelection = defs.selectAll('.pattern')
@@ -447,8 +383,6 @@ export class KuiChartKa {
                 return this.diagonal(o, o)
             })
             .remove();
-
-
         // --------------------------  NODES ----------------------
         // Updating nodes
         const nodesSelection = centerG.selectAll('g.node')
@@ -461,7 +395,6 @@ export class KuiChartKa {
             .attr("transform", function (d) {
                 return "translate(" + source.x0 + "," + source.y0 + ")";
             })
-            // .style("z-index", -1)
             .attr('cursor', 'pointer')
         // .on('click', (event, d) => {
         //     if ([...event.srcElement.classList].
@@ -479,14 +412,15 @@ export class KuiChartKa {
                 selector: 'node-rect',
                 data: d => [d]
             })
-
+            .attr('fill', "none")
+            .attr('fill-opacity', 0)
+            .attr('stroke-opacity', 0)
+            .attr('stroke', 'none')
             .attr('width', 1e-6)
             .attr('height', 1e-6)
-            .style("fill", function (d) {
-                return d._children ? "red" : "#fff";
-            })
-
-
+            // .style("fill", function (d) {
+            //     return d._children ? "red" : "#fff";
+            // })
 
         // Add foreignObject element
         const fo = nodeEnter
@@ -499,9 +433,6 @@ export class KuiChartKa {
             .attr('height', d => d.height)
             .attr('x', d => -d.width / 2)
             .attr('y', d => -d.height / 2)
-        // .on('click', ()=>{
-        //     console.log("Rect clicked")
-        // })
 
         // Add foreign object 
         fo.patternify({
@@ -511,51 +442,53 @@ export class KuiChartKa {
         })
             .style('width', d => d.width + 'px')
             .style('height', d => d.height + 'px')
-            .style('color', 'white')
-            .html(d => d.data.template)
+            // .style('color', 'none')
+
         const nodeRect = nodeEnter.select('.node-foreign-object-div');
-        nodeRect.on('click', () => {
-            console.log("Rect clicked")
-        })
-            .call(attrs.dragBehavior)
-        nodeEnter
-            .patternify({
-                tag: 'image',
-                selector: 'node-icon-image',
-                data: d => [d]
-            })
-            .attr('width', d => d.data.nodeIcon.size)
-            .attr('height', d => d.data.nodeIcon.size)
-            // .attr("xlink:href",d=>d.data.nodeIcon.icon)
-            .attr('x', d => -d.width / 2 + 5)
-            .attr('y', d => d.height / 2 - d.data.nodeIcon.size - 5)
+        nodeRect.call(attrs.dragBehavior)
 
-        nodeEnter
-            .patternify({
-                tag: 'text',
-                selector: 'node-icon-text-total',
-                data: d => [d]
-            })
-            .text('test')
-            .attr('x', d => -d.width / 2 + 7)
-            .attr('y', d => d.height / 2 - d.data.nodeIcon.size - 5)
-            //.attr('text-anchor','middle')
-            .text(d => d.data.totalSubordinates + ' Subordinates')
-            .attr('fill', attrs.nodeTextFill)
-            .attr('font-weight', 'bold')
+        // nodeEnter
+        //     .patternify({
+        //         tag: 'image',
+        //         selector: 'node-icon-image',
+        //         data: d => [d]
+        //     })
+        //     .attr('width', d => d.data.nodeIcon.size)
+        //     .attr('height', d => d.data.nodeIcon.size)
+        //     // .attr("xlink:href",d=>d.data.nodeIcon.icon)
+        //     .attr('x', d => -d.width / 2 + 5)
+        //     .attr('y', d => d.height / 2 - d.data.nodeIcon.size - 5)
 
-        nodeEnter
-            .patternify({
-                tag: 'text',
-                selector: 'node-icon-text-direct',
-                data: d => [d]
-            })
-            .text('test')
-            .attr('x', d => -d.width / 2 + 10 + d.data.nodeIcon.size)
-            .attr('y', d => d.height / 2 - 10)
-            .text(d => d.data.directSubordinates + ' Direct ')
-            .attr('fill', attrs.nodeTextFill)
-            .attr('font-weight', 'bold')
+        // nodeEnter
+        //     .patternify({
+        //         tag: 'text',
+        //         selector: 'node-icon-text-total',
+        //         data: d => [d]
+        //     })
+        //     .text('test')
+        //     .attr('x', d => -d.width / 2 + 7)
+        //     .attr('y', d => d.height / 2 - d.data.nodeIcon.size - 5)
+        //     // .attr('text-anchor','middle')
+        //     .text(d => {
+        //         return d.data.totalSubordinates + ' Subordinates'
+        //     })
+        //     .attr('fill', attrs.nodeTextFill)
+        //     .attr('font-weight', 'bold')
+
+        // nodeEnter
+        //     .patternify({
+        //         tag: 'text',
+        //         selector: 'node-icon-text-direct',
+        //         data: d => [d]
+        //     })
+        //     .text('test')
+        //     .attr('x', d => -d.width / 2 + 10 + d.data.nodeIcon.size)
+        //     .attr('y', d => d.height / 2 - 10)
+        //     .text(d => { 
+        //         return d.data.directSubordinates + ' Direct '
+        //     })
+        //     .attr('fill', attrs.nodeTextFill)
+        //     .attr('font-weight', 'bold')
 
 
         // Node images
@@ -605,6 +538,18 @@ export class KuiChartKa {
         var nodeUpdate = nodeEnter.merge(nodesSelection)
             .style('font', '16px sans-serif')
 
+        //Update direct and subordinates on moving nodes
+        // nodeUpdate.select('.node-icon-text-direct')
+        // .text(d => 'Manages: ' + d.data.directSubordinates)
+
+        // nodeUpdate.select('.node-icon-text-total')
+        // .text(d => 'Oversees: ' + d.data.totalSubordinates)
+        // Restyle node button circle
+        nodeUpdate
+            .select(".node-foreign-object-div")
+            .html((node) => {
+                return this.getNodeContent(node)
+            })
         // Transition to the proper position for the node
         nodeUpdate.transition()
             .attr('opacity', 0)
@@ -640,11 +585,11 @@ export class KuiChartKa {
             .attr('height', d => d.height)
             .attr('x', d => -d.width / 2)
             .attr('y', d => -d.height / 2)
-            .attr('rx', d => d.borderRadius || 0)
-            .attr('stroke-width', d => d.borderWidth || attrs.strokeWidth)
+            // .attr('rx', d => d.borderRadius || 0)
+            // .attr('stroke-width', d => d.borderWidth || attrs.strokeWidth)
             .attr('cursor', 'pointer')
-            .attr('stroke', d => d.borderColor)
-            .style("fill", d => d.backgroundColor)
+            // .attr('stroke', d => d.borderColor)
+            // .style("fill", d => d.backgroundColor)
 
 
         // Move node button group to the desired position
@@ -715,39 +660,94 @@ export class KuiChartKa {
         });
         // debugger;  
     }
+
+    getTreeDataAndLink(source, treeData) {
+        let attrs = this.getAttrs();
+        // Get tree nodes and links
+        const nodes = treeData.descendants().map(d => {
+            if (d.width) return d;
+
+            let imageWidth = 100;
+            let imageHeight = 100;
+            let imageBorderColor = 'steelblue';
+            let imageBorderWidth = 0;
+            let imageRx = 15;
+            let imageCenterTopDistance = 0;
+            let imageCenterLeftDistance = 0;
+            let borderColor = 'steelblue';
+            let backgroundColor = 'steelblue';
+            let width = 280;
+            let height = 200;
+            let dropShadowId = `none`
+            if (d.data.nodeImage && d.data.nodeImage.shadow) {
+                dropShadowId = `url(#${attrs.dropShadowId})`
+            }
+            if (d.data.nodeImage && d.data.nodeImage.width) {
+                imageWidth = d.data.nodeImage.width
+            };
+            if (d.data.nodeImage && d.data.nodeImage.height) {
+                imageHeight = d.data.nodeImage.height
+            };
+            if (d.data.nodeImage && d.data.nodeImage.borderColor) {
+                imageBorderColor = this.rgbaObjToColor(d.data.nodeImage.borderColor)
+            };
+            if (d.data.nodeImage && d.data.nodeImage.borderWidth) {
+                imageBorderWidth = d.data.nodeImage.borderWidth
+            };
+            if (d.data.nodeImage && d.data.nodeImage.centerTopDistance) {
+                imageCenterTopDistance = d.data.nodeImage.centerTopDistance
+            };
+            if (d.data.nodeImage && d.data.nodeImage.centerLeftDistance) {
+                imageCenterLeftDistance = d.data.nodeImage.centerLeftDistance
+            };
+            if (d.data.borderColor) {
+                borderColor = this.rgbaObjToColor(d.data.borderColor);
+            }
+            if (d.data.backgroundColor) {
+                backgroundColor = this.rgbaObjToColor(d.data.backgroundColor);
+            }
+            if (d.data.nodeImage &&
+                d.data.nodeImage.cornerShape.toLowerCase() == "circle") {
+                imageRx = Math.max(imageWidth, imageHeight);
+            }
+            if (d.data.nodeImage &&
+                d.data.nodeImage.cornerShape.toLowerCase() == "rounded") {
+                imageRx = Math.min(imageWidth, imageHeight) / 6;
+            }
+
+            return Object.assign(d, {
+                imageWidth,
+                imageHeight,
+                imageBorderColor,
+                imageBorderWidth,
+                borderColor,
+                backgroundColor,
+                imageRx,
+                width,
+                height,
+                imageCenterTopDistance,
+                imageCenterLeftDistance,
+                dropShadowId
+            });
+        });
+        return nodes;
+    }
     dragstarted(event, d) {
-        // if(event.dx === 0 && event.dy === 0) return;
-        console.log("Drag started")
         const pNode = d3.select(this.parentNode.parentNode);
         const mNode = pNode.clone(true);
-        // const mNode = this.cloneNode(true)
-        // const node = mNode.selectChild("foreignObject");
-        // node.style("border", '5px solid red');
-        // mNode.style("z-index", 999999);
-        // mNode.style("position", "absolute");
         pNode.attr('class', "node node-draggable");
         mNode.attr('class', "node node-dragging");
         mNode.select('.node-button-g').remove();
         mNode.raise()
-        // mNode.attr("class", "node-draggable");
-        // event.sourceEvent.preventDefault();
-        // event.sourceEvent.stopPropagation();
-        // pNode.style("position", "relative");
-        // pNode.style("overflow", "visible");
-        // node.attr('stroke-width', 2);
     }
 
 
     dragged(event, d) {
-        // d.x0 += event.dy;
-        // d.y0 += event.dx;
         const node = d3.select("g.node-dragging");
-        // var x = d.y, y = d.y;
         d.x += event.dx;
         d.y += event.dy;
         var dx = d.x;
         var dy = d.y;
-        console.log("Drag starting")
 
         const attrs = this.getAttrs();
         attrs.allNodes.forEach(nd => {
@@ -766,53 +766,39 @@ export class KuiChartKa {
     }
 
     dragended(event, d) {
-        console.log("Drag endded")
-        // d3.select(this).attr("cursor", "grab");
+        //reset cursor to orginal coordinate for dragging later
         d.x = d.x0;
         d.y = d.y0;
-        // var dx = d.x0;
-        // var dy = d.y0;
 
         const node = d3.select(`g[nodeId=${d.id}]`);
         node.attr('class', 'node')
-        // node.attr("transform", "translate(" + dx + "," + dy + ")");
+
         let removed = d3.select('g.node-dragging');
         removed = removed.remove();
         let dropped = d3.select('g.node-dropable');
-        if (dropped) {
-            const attrs = this.getAttrs()
+        if (dropped.size() > 0) {
+            let selectedNode = dropped.data()[0]
             dropped.attr('class', 'node');
             let draggingNode = d;
-            let selectedNode = dropped.data()[0]
-            // this.collapse(draggingNode.parent);
+
             this.moveNode(draggingNode, selectedNode);
-            // this.centerNode(selectedNode);
-            // this.update(attrs.root);
-            // this.setLayouts(true);
-            // this.expand(draggingNode.parent);
-            // this.collapse(selectedNode);
-            // this.expandSomeNodes(selectedNode);
-            this.update(draggingNode.parent)
-            // this.centerNode(draggingNode);
-            // this.update(selectedNode)
+            this.update(this.getAttrs().root)
         }
     }
-    // centerNode(source) {
-    //     const attrs = this.getAttrs();
-    //     const container = d3.select(attrs.container);
-    //     const containerRect = container.node().getBoundingClientRect();
 
-    //     let t = d3.zoomTransform(attrs.chart.node());
-    //     console.log(t);
+    getNodeContent(node) {
+        return `<div class='node-content' style="width:${node.width}px;height:${node.height}px">
+        <div class='node-title'>${node.data.name}
+        <p class='sub-title'>${node.data.positionName}</p>
+        </div>
+        <div class='node-extra-info'>
+            <span>Manages: ${node.data.directSubordinates}</span>
+            <span>Oversees: ${node.data.totalSubordinates}</span>
+        </div>
+        </div>`
+    }
 
-    //     let x = -source.y0;
-    //     let y = -source.x0;
-
-    //     y = -y * t.k + containerRect.height / 2;
-
-    //     attrs.chart.transition().duration(750).call(attrs.zoomBehavior.transform, d3.zoomIdentity.translate(x, y).scale(t.k));
-
-    // }
+    //update depth to re-draw in a correct level along with its link
     updateDepth(parent, depth) {
         parent.depth = depth + 1;
         let childrens = parent.children || parent._children;
@@ -827,25 +813,41 @@ export class KuiChartKa {
         }
     }
 
+    updateNodeInfo(...ds) {
+        ds.forEach(d => {
+            let childrens = d.children || d._children || [];
+            d.data.directSubordinates = childrens.length;
+            d.data.totalSubordinates = childrens.reduce((pre, cur) => {
+                return pre + cur.data.totalSubordinates
+            }, 0) + childrens.length;
+        })
+    }
+
     moveNode(draggingNode, selectedNode) {
         // now remove the element from the parent, and insert it into the new elements children
-        var index = draggingNode.parent.children.indexOf(draggingNode);
-        if (index > -1) {
-            draggingNode.parent.children.splice(index, 1);
+        var childrens = draggingNode.parent.children.filter(d => d.id !== draggingNode.id);
+        let preParent = draggingNode.parent;
+        if (childrens) {
+            //If a node has empty children, then set childrents to null instead of having empty array.
+            //Otherwise, it will cause a failure to render the tree
+            draggingNode.parent.children = childrens.length ? childrens : null;
             draggingNode.parent = selectedNode;
             draggingNode.data.parentId = selectedNode.id;
-            this.updateDepth(draggingNode, selectedNode.depth)
+            childrens = null;
         }
         if (selectedNode.children || selectedNode._children) {
             if (selectedNode.children) {
                 selectedNode.children.push(draggingNode);
             } else {
                 selectedNode._children.push(draggingNode);
+                childrens = selectedNode._children;
             }
         } else {
             selectedNode.children = [];
             selectedNode.children.push(draggingNode);
         }
+        this.updateDepth(draggingNode, selectedNode.depth)
+        this.updateNodeInfo(preParent, selectedNode);
     }
 
     // Zoom handler func
@@ -919,7 +921,19 @@ export class KuiChartKa {
             return result;
         })
 
-        return overlap;
+
+        let isParentOf = false;
+        if (overlap) {
+            let child = b, parent = a;
+            while (child.depth - parent.depth > -1) {
+                if (child.id === parent.id) {
+                    isParentOf = true;
+                    break;
+                }
+                child = child.parent;
+            }
+        }
+        return overlap && !isParentOf;
     }
 
     diagonal(s, t) {
