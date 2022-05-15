@@ -40,13 +40,18 @@ export class KuiChartKa {
             depth: 180,
             duration: 600,
             strokeWidth: 3,
-            dropShadowId: null,
+            dropShadowId: "dropshadow",
             initialZoom: 1,
             onNodeClick: d => d,
             nodeId: d => d.nodeId || d.id,
             parentNodeId: d => d.parentNodeId || d.parentId,
             nodeDefaultBackground: 'none',
             scaleExtent: [0.1, 10],
+            nodeContent: d => `<div>${d.data.name}</div>`,
+            nodeWidth: 300,
+            nodeHeight: 250,
+            nodeMaxHeight: () => Math.round(this.nodeHeight() * 1.25),
+            nodeMaxWidth: () => Math.round(this.nodeWidth() * 1.001),
         };
 
         Object.keys(attrs).forEach(key => {
@@ -104,8 +109,8 @@ export class KuiChartKa {
         calc.chartTopMargin = attrs.marginTop;
         calc.chartWidth = attrs.svgWidth - attrs.marginRight - calc.chartLeftMargin;
         calc.chartHeight = attrs.svgHeight - attrs.marginBottom - calc.chartTopMargin;
-        calc.nodeMaxWidth = 300;
-        calc.nodeMaxHeight = 250;
+        calc.nodeMaxWidth = attrs.nodeMaxWidth();
+        calc.nodeMaxHeight = attrs.nodeMaxHeight();
 
         attrs.depth = calc.nodeMaxHeight + 100;
 
@@ -118,7 +123,7 @@ export class KuiChartKa {
         }
 
         layouts.treemap = d3.tree().size([calc.chartWidth, calc.chartHeight])
-            .nodeSize([calc.nodeMaxWidth + 100, calc.nodeMaxHeight + attrs.depth])
+            .nodeSize([calc.nodeMaxWidth + 70, calc.nodeMaxHeight + attrs.depth])
 
         attrs.layouts = layouts;
 
@@ -183,14 +188,10 @@ export class KuiChartKa {
             .attr('viewBox', [0, 0, attrs.svgWidth, attrs.svgHeight])
             // .attr('height', attrs.svgHeight)
             .attr('font-family', attrs.defaultFont)
-            .call(attrs.zoomBehavior)
+            // .call(attrs.zoomBehavior)
             .attr('cursor', 'move')
+            // .attr('class')
             .style('background-color', attrs.backgroundColor)
-        if (attrs.firstDraw) {
-            svg.call(attrs.zoomBehavior)
-                .on("zoom", null)
-                .attr("cursor", "move")
-        }
         attrs.svg = svg;
         //Add container g element
         var chart = svg
@@ -276,6 +277,9 @@ export class KuiChartKa {
         // Display tree contenrs
         this.update(root)
         if (attrs.firstDraw) {
+            svg.call(attrs.zoomBehavior)
+                .on("zoom", null)
+                .attr("cursor", "move")
             attrs.firstDraw = false;
         }
         return this;
@@ -284,7 +288,7 @@ export class KuiChartKa {
         //  Assigns the x and y position for the nodes
         const attrs = this.getAttrs();
         const treeData = attrs.layouts.treemap(attrs.root);
-        const { defs, centerG, svg, chart, root, layouts } = attrs
+        const { defs, centerG } = attrs
 
         //  Assigns the x and y position for the nodes
 
@@ -303,27 +307,27 @@ export class KuiChartKa {
 
         const patternEnterSelection = patternsSelection.enter().append('pattern')
 
-        const patterns = patternEnterSelection
-            .merge(patternsSelection)
-            .attr('class', 'pattern')
-            .attr('height', 1)
-            .attr('width', 1)
-            .attr('id', d => d.id)
+        // const patterns = patternEnterSelection
+        //     .merge(patternsSelection)
+        //     .attr('class', 'pattern')
+        //     .attr('height', 1)
+        //     .attr('width', 1)
+        //     .attr('id', d => d.id)
 
-        const patternImages = patterns.patternify({
-            tag: 'image',
-            selector: 'pattern-image',
-            data: d => [d]
-        })
-            .attr('x', 0)
-            .attr('y', 0)
-            .attr('height', d => d.imageWidth)
-            .attr('width', d => d.imageHeight)
-            .attr('xlink:href', d => d.data.imageUrl)
-            .attr('viewbox', d => `0 0 ${d.imageWidth * 2} ${d.imageHeight}`)
-            .attr('preserveAspectRatio', 'xMidYMin slice')
+        // const patternImages = patterns.patternify({
+        //     tag: 'image',
+        //     selector: 'pattern-image',
+        //     data: d => [d]
+        // })
+        //     .attr('x', 0)
+        //     .attr('y', 0)
+        //     .attr('height', d => d.imageWidth)
+        //     .attr('width', d => d.imageHeight)
+        //     .attr('xlink:href', d => d.data.imageUrl)
+        //     .attr('viewbox', d => `0 0 ${d.imageWidth * 2} ${d.imageHeight}`)
+        // .attr('preserveAspectRatio', 'xMidYMin slice')
 
-        patternsSelection.exit().transition().duration(attrs.duration).remove();
+        // patternsSelection.exit().transition().duration(attrs.duration).remove();
 
         // --------------------------  LINKS ----------------------
 
@@ -342,7 +346,10 @@ export class KuiChartKa {
                     x: source.x0,
                     y: source.y0
                 }
-                return this.diagonal(o, o)
+                let childrens = d.parent?.children || d.parent?._children;
+                let pos = childrens.indexOf(d);
+                let edge = pos === 0 || pos === childrens.length - 1;
+                return this.diagonal(o, o, edge)
             });
 
         // UPDATE
@@ -369,7 +376,10 @@ export class KuiChartKa {
         linkUpdate.transition()
             .duration(attrs.duration)
             .attr('d', (d) => {
-                return this.diagonal(d, d.parent)
+                let childrens = d.parent?.children || d.parent?._children;
+                let pos = childrens.indexOf(d);
+                let edge = pos === 0 || pos === childrens.length - 1;
+                return this.diagonal(d, d.parent, edge)
             });
 
         // Remove any exiting links
@@ -380,7 +390,10 @@ export class KuiChartKa {
                     x: source.x,
                     y: source.y
                 }
-                return this.diagonal(o, o)
+                let childrens = d.parent?.children || d.parent?._children;
+                let pos = childrens.indexOf(d);
+                let edge = pos === 0 || pos === childrens.length - 1;
+                return this.diagonal(o, o, edge)
             })
             .remove();
         // --------------------------  NODES ----------------------
@@ -390,12 +403,13 @@ export class KuiChartKa {
 
         // Enter any new nodes at the parent's previous position.
         var nodeEnter = nodesSelection.enter().append('g')
-            .attr('class', 'node')
+            .attr('class', 'node ')
             .attr('nodeId', (d) => d.id)
             .attr("transform", function (d) {
                 return "translate(" + source.x0 + "," + source.y0 + ")";
             })
             .attr('cursor', 'pointer')
+
         // .on('click', (event, d) => {
         //     if ([...event.srcElement.classList].
         //         includes('node-button-circle')) {
@@ -406,21 +420,21 @@ export class KuiChartKa {
         // })
 
         // Add rectangle for the nodes 
-        nodeEnter
-            .patternify({
-                tag: 'rect',
-                selector: 'node-rect',
-                data: d => [d]
-            })
-            .attr('fill', "none")
-            .attr('fill-opacity', 0)
-            .attr('stroke-opacity', 0)
-            .attr('stroke', 'none')
-            .attr('width', 1e-6)
-            .attr('height', 1e-6)
-            // .style("fill", function (d) {
-            //     return d._children ? "red" : "#fff";
-            // })
+        // nodeEnter
+        //     .patternify({
+        //         tag: 'rect',
+        //         selector: 'node-rect',
+        //         data: d => [d]
+        //     })
+        //     .attr('fill', "none")
+        //     .attr('fill-opacity', 0)
+        //     .attr('stroke-opacity', 0)
+        //     .attr('stroke', 'none')
+        //     .attr('width', 1e-6)
+        //     .attr('height', 1e-6)
+        // .style("fill", function (d) {
+        //     return d._children ? "red" : "#fff";
+        // })
 
         // Add foreignObject element
         const fo = nodeEnter
@@ -433,6 +447,7 @@ export class KuiChartKa {
             .attr('height', d => d.height)
             .attr('x', d => -d.width / 2)
             .attr('y', d => -d.height / 2)
+            .attr('class', 'node-foreign-object rounded-2xl hover:shadow-2xl')
 
         // Add foreign object 
         fo.patternify({
@@ -442,10 +457,14 @@ export class KuiChartKa {
         })
             .style('width', d => d.width + 'px')
             .style('height', d => d.height + 'px')
-            // .style('color', 'none')
-
-        const nodeRect = nodeEnter.select('.node-foreign-object-div');
-        nodeRect.call(attrs.dragBehavior)
+        // .style('color', 'none')
+        nodeEnter.select('.node-foreign-object-div')
+        .call(attrs.dragBehavior)
+        .on("click", (e, d) => {
+            if (e.defaultPrevented) return; // dragged
+            attrs.onNodeClick(d)
+        })
+        // nodeRect.on('click', attrs.onNodeClick)
 
         // nodeEnter
         //     .patternify({
@@ -492,19 +511,19 @@ export class KuiChartKa {
 
 
         // Node images
-        const nodeImageGroups = nodeEnter.patternify({
-            tag: 'g',
-            selector: 'node-image-group',
-            data: d => [d]
-        })
+        // const nodeImageGroups = nodeEnter.patternify({
+        //     tag: 'g',
+        //     selector: 'node-image-group',
+        //     data: d => [d]
+        // })
 
-        // Node image rectangle 
-        nodeImageGroups
-            .patternify({
-                tag: 'rect',
-                selector: 'node-image-rect',
-                data: d => [d]
-            })
+        // // Node image rectangle 
+        // nodeImageGroups
+        //     .patternify({
+        //         tag: 'rect',
+        //         selector: 'node-image-rect',
+        //         data: d => [d]
+        //     })
 
         // Node button circle group
         const nodeButtonGroups = nodeEnter
@@ -513,7 +532,12 @@ export class KuiChartKa {
                 selector: 'node-button-g',
                 data: d => [d]
             })
-            .on('click', (event, d) => this.click(event, d))
+            .on('click', (event, d) => {
+                console.log('Event button')
+                this.click(event, d)
+                event.preventDefault()
+                event.stopPropagation()
+            })
 
         // Add button circle 
         nodeButtonGroups
@@ -547,9 +571,11 @@ export class KuiChartKa {
         // Restyle node button circle
         nodeUpdate
             .select(".node-foreign-object-div")
-            .html((node) => {
-                return this.getNodeContent(node)
-            })
+            // .call(node => attrs.nodeContent(node))
+            .html(attrs.nodeContent)
+        // .html((node) => {
+        //     return attrs.nodeContent(node)
+        // })
         // Transition to the proper position for the node
         nodeUpdate.transition()
             .attr('opacity', 0)
@@ -560,36 +586,36 @@ export class KuiChartKa {
             .attr('opacity', 1)
 
         // Move images to desired positions
-        nodeUpdate.selectAll('.node-image-group')
-            .attr('transform', d => {
-                let x = -d.imageWidth / 2 - d.width / 2;
-                let y = -d.imageHeight / 2 - d.height / 2;
-                return `translate(${x},${y})`
-            })
+        // nodeUpdate.selectAll('.node-image-group')
+        //     .attr('transform', d => {
+        //         let x = -d.imageWidth / 2 - d.width / 2;
+        //         let y = -d.imageHeight / 2 - d.height / 2;
+        //         return `translate(${x},${y})`
+        //     })
 
 
-        nodeUpdate.select('.node-image-rect')
-            .attr('fill', d => `url(#${d.id})`)
-            .attr('width', d => d.imageWidth)
-            .attr('height', d => d.imageHeight)
-            .attr('stroke', d => d.imageBorderColor)
-            .attr('stroke-width', d => d.imageBorderWidth)
-            .attr('rx', d => d.imageRx)
-            .attr('y', d => d.imageCenterTopDistance)
-            .attr('x', d => d.imageCenterLeftDistance)
-            .attr('filter', d => d.dropShadowId)
+        // nodeUpdate.select('.node-image-rect')
+        //     .attr('fill', d => `url(#${d.id})`)
+        //     .attr('width', d => d.imageWidth)
+        //     .attr('height', d => d.imageHeight)
+        //     .attr('stroke', d => d.imageBorderColor)
+        //     .attr('stroke-width', d => d.imageBorderWidth)
+        //     .attr('rx', d => d.imageRx)
+        //     .attr('y', d => d.imageCenterTopDistance)
+        //     .attr('x', d => d.imageCenterLeftDistance)
+        //     .attr('filter', d => `url(#${attrs.dropShadowId})`)
 
         // Update  node attributes and style
-        nodeUpdate.select('.node-rect')
-            .attr('width', d => d.width)
-            .attr('height', d => d.height)
-            .attr('x', d => -d.width / 2)
-            .attr('y', d => -d.height / 2)
-            // .attr('rx', d => d.borderRadius || 0)
-            // .attr('stroke-width', d => d.borderWidth || attrs.strokeWidth)
-            .attr('cursor', 'pointer')
-            // .attr('stroke', d => d.borderColor)
-            // .style("fill", d => d.backgroundColor)
+        // nodeUpdate.select('.node-rect')
+        //     .attr('width', d => d.width)
+        //     .attr('height', d => d.height)
+        //     .attr('x', d => -d.width / 2)
+        //     .attr('y', d => -d.height / 2)
+        // .attr('rx', d => d.borderRadius || 0)
+        // .attr('stroke-width', d => d.borderWidth || attrs.strokeWidth)
+        // .attr('cursor', 'pointer')
+        // .attr('stroke', d => d.borderColor)
+        // .style("fill", d => d.backgroundColor)
 
 
         // Move node button group to the desired position
@@ -640,18 +666,18 @@ export class KuiChartKa {
 
 
         // On exit reduce the node rects size to 0
-        nodeExitTransition.selectAll('.node-rect')
-            .attr('width', 10)
-            .attr('height', 10)
-            .attr('x', 0)
-            .attr('y', 0);
+        // nodeExitTransition.selectAll('.node-rect')
+        //     .attr('width', 10)
+        //     .attr('height', 10)
+        //     .attr('x', 0)
+        //     .attr('y', 0);
 
         // On exit reduce the node image rects size to 0
-        nodeExitTransition.selectAll('.node-image-rect')
-            .attr('width', 10)
-            .attr('height', 10)
-            .attr('x', d => d.width / 2)
-            .attr('y', d => d.height / 2)
+        // nodeExitTransition.selectAll('.node-image-rect')
+        //     .attr('width', 10)
+        //     .attr('height', 10)
+        //     .attr('x', d => d.width / 2)
+        //     .attr('y', d => d.height / 2)
 
         // Store the old positions for transition.
         nodes.forEach(function (d) {
@@ -676,8 +702,8 @@ export class KuiChartKa {
             let imageCenterLeftDistance = 0;
             let borderColor = 'steelblue';
             let backgroundColor = 'steelblue';
-            let width = 280;
-            let height = 200;
+            let width = attrs.nodeWidth;
+            let height = attrs.nodeHeight;
             let dropShadowId = `none`
             if (d.data.nodeImage && d.data.nodeImage.shadow) {
                 dropShadowId = `url(#${attrs.dropShadowId})`
@@ -734,16 +760,22 @@ export class KuiChartKa {
     }
     dragstarted(event, d) {
         const pNode = d3.select(this.parentNode.parentNode);
-        const mNode = pNode.clone(true);
-        pNode.attr('class', "node node-draggable");
-        mNode.attr('class', "node node-dragging");
-        mNode.select('.node-button-g').remove();
-        mNode.raise()
+        // const mNode = pNode.clone(true);
+        pNode.attr('class', "node drag-selected");
     }
 
-
     dragged(event, d) {
-        const node = d3.select("g.node-dragging");
+        let node = d3.select("g.node-dragging");
+        //Clone a new node for moving
+        if (node.size() === 0) {
+            const pNode = d3.select('g.drag-selected')
+            pNode.attr('class', 'node node-draggable drop-shadow-3xl')
+            node = pNode.clone(true);
+            node.attr('class', "node node-dragging");
+            node.select('.node-button-g').remove();
+            node.raise()
+        }
+
         d.x += event.dx;
         d.y += event.dy;
         var dx = d.x;
@@ -756,9 +788,9 @@ export class KuiChartKa {
             }
             var oNode = d3.select(`g[nodeId=${nd.id}]`);
             if (this.checkOverLap(d, nd, 50)) {
-                oNode.attr('class', 'node node-dropable');
+                oNode.attr('class', 'node node-dropable drop-shadow-4xl');
             } else {
-                oNode.attr('class', 'node');
+                oNode.attr('class', 'node ');
             }
         })
 
@@ -771,19 +803,23 @@ export class KuiChartKa {
         d.y = d.y0;
 
         const node = d3.select(`g[nodeId=${d.id}]`);
-        node.attr('class', 'node')
+        node.attr('class', 'node ')
 
         let removed = d3.select('g.node-dragging');
         removed = removed.remove();
         let dropped = d3.select('g.node-dropable');
         if (dropped.size() > 0) {
             let selectedNode = dropped.data()[0]
-            dropped.attr('class', 'node');
+            dropped.attr('class', 'node ');
             let draggingNode = d;
 
             this.moveNode(draggingNode, selectedNode);
             this.update(this.getAttrs().root)
         }
+    }
+
+    nodeClicked = (d) => {
+        this.getAttrs().onNodeClick(d);
     }
 
     getNodeContent(node) {
@@ -886,7 +922,6 @@ export class KuiChartKa {
             d.expanded = false;
         }
         this.update(d);
-        console.log('Node clicked')
     }
     expandSomeNodes(d) {
         if (d.expanded) {
@@ -936,7 +971,7 @@ export class KuiChartKa {
         return overlap && !isParentOf;
     }
 
-    diagonal(s, t) {
+    diagonal(s, t, edge = false) {
         const x = s.x;
         const y = s.y;
         const ex = t.x;
@@ -953,16 +988,45 @@ export class KuiChartKa {
         let h = Math.abs(ey - y) / 2 - r;
         let w = Math.abs(ex - x) - r * 2;
         //w=0;
+        var L = edge ? 'C' : 'L';
         const path = `
         M ${x} ${y}
         L ${x} ${y + h * yrvs}
-        C  ${x} ${y + h * yrvs + r * yrvs} ${x} ${y + h * yrvs + r * yrvs} ${x + r * xrvs} ${y + h * yrvs + r * yrvs}
+        ${L} ${x} ${y + h * yrvs + r * yrvs} ${x} ${y + h * yrvs + r * yrvs} ${x + r * xrvs} ${y + h * yrvs + r * yrvs}
         L ${x + w * xrvs + r * xrvs} ${y + h * yrvs + r * yrvs}
-        C ${ex}  ${y + h * yrvs + r * yrvs} ${ex}  ${y + h * yrvs + r * yrvs} ${ex} ${ey - h * yrvs}
+        L ${ex}  ${y + h * yrvs + r * yrvs} ${ex}  ${y + h * yrvs + r * yrvs} ${ex} ${ey - h * yrvs}
         L ${ex} ${ey}
 `
         return path;
     }
+
+    //     diagonal(s, t) {
+    //         const x = s.x;
+    //         const y = s.y;
+    //         const ex = t.x;
+    //         const ey = t.y;
+
+    //         let xrvs = ex - x < 0 ? -1 : 1;
+    //         let yrvs = ey - y < 0 ? -1 : 1;
+
+    //         let rdef = 35;
+    //         let r = Math.abs(ex - x) / 2 < rdef ? Math.abs(ex - x) / 2 : rdef;
+
+    //         r = Math.abs(ey - y) / 2 < r ? Math.abs(ey - y) / 2 : r;
+
+    //         let h = Math.abs(ey - y) / 2 - r;
+    //         let w = Math.abs(ex - x) - r * 2;
+    //         //w=0;
+    //         const path = `
+    //         M ${x} ${y}
+    //         L ${x} ${y + h * yrvs}
+    //         C  ${x} ${y + h * yrvs + r * yrvs} ${x} ${y + h * yrvs + r * yrvs} ${x + r * xrvs} ${y + h * yrvs + r * yrvs}
+    //         L ${x + w * xrvs + r * xrvs} ${y + h * yrvs + r * yrvs}
+    //         C ${ex}  ${y + h * yrvs + r * yrvs} ${ex}  ${y + h * yrvs + r * yrvs} ${ex} ${ey - h * yrvs}
+    //         L ${ex} ${ey}
+    // `
+    //         return path;
+    //     }
 
     collapse(d) {
         if (d.children) {

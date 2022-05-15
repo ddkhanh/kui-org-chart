@@ -3,6 +3,7 @@ import { render } from 'react-dom';
 import './App.css';
 import { OrgChartComponent } from './components/OrgChart';
 import * as d3 from 'd3';
+import { OrgChart } from './components/OrgChart2';
 
 
 const App = props => {
@@ -34,6 +35,7 @@ const App = props => {
     <div>
       Click node to trigger action in parent or &nbsp;
       <button onClick={() => addNode()}>add node as root's child</button>
+      {/* <OrgChart data={data}></OrgChart> */}
       <OrgChartComponent
         setClick={click => (addNodeChildFunc = click)}
         onNodeClick={onNodeClick}
